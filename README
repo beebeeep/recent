@@ -7,7 +7,8 @@ recent is extremely handy for processing log files for various needs - monitorin
 Actually, recent is C clone of perl program 'timetail', widely used inside of Yandex.
 
 recent is intended to be a very fast and lightweight, indeed.
---------------------------------
+
+===========================================
 
 recent - это простая утилита, напоминающая собой стандартный 'tail', однако вместо вывода последних Х строк файла,
 она выводит строки, добавленные не раньше, чем Х секунд назад.
