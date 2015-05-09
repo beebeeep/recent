@@ -1,0 +1,25 @@
+recent is a simple tool that works just as standard 'tail' utility but instead of printing last X lines,
+it prints the recent ones - lines that was added X seconds ago.
+
+Of course, it assumes that all lines in file (well, actually, at least some of them) contains a timestamp, so
+recent is extremely handy for processing log files for various needs - monitoring, debugging, quick analysis and so on.
+
+Actually, recent is C clone of perl program 'timetail', widely used inside of Yandex.
+
+recent is intended to be a very fast and lightweight, indeed.
+--------------------------------
+
+recent - это простая утилита, напоминающая собой стандартный 'tail', однако вместо вывода последних Х строк файла,
+она выводит строки, добавленные не раньше, чем Х секунд назад.
+
+Само собой, подразумевается, что все строки в файле (на самом деле, хотя бы некоторые из них) начинаются
+с временной метки, так что recent весьма полезен для операция с файлами логов - например, для организации
+мониторинга, отладки приложений, для проведения быстрого анализа и прочих полезных вещей.
+
+Вообще говоря, recent - написанный на языке Си клон перловой утилиты 'timetail', широко используемой внутри Яндекса.
+
+Само собой, предполагается, что recent будет весьма быстрой и легковесной утилитой.
+
+--
+Migalin Danila <me@miga.me.uk>
+2015
