@@ -43,6 +43,42 @@ void print_line(char *file, off_t pos)
     write(STDOUT_FILENO, &file[pos], end - pos);
 }
 
+char *get_ts_format(char *descr)
+{
+    FILE *f;
+    f = fopen("timestamps.conf", "r");
+    if (f == NULL) {
+        f = fopen("/etc/recent/timestamps.conf", "r");
+        if (f == NULL) {
+            perror("Cannot read timestamps.conf!");
+            exit(-1);
+        }
+    }
+
+    ssize_t len; size_t bufsize = 512; 
+    char *buf = (char *)malloc(bufsize);
+    char *fmt;
+    for (;;) {
+        len = getline(&buf, &bufsize, f);
+        if (len == -1) {
+            break;
+        }
+        if (buf[0] == '#') {
+            continue;
+        }
+        if (buf[len-1] == '\n') {
+            buf[len-1] = '\0';
+        }
+
+        fmt = strsep(&buf, "=");
+        if (!strcmp(fmt, descr)) {
+            return buf;
+        }
+        buf = fmt;
+    }
+    return NULL;
+}
+
 time_t get_nearest_timestamp(char *fmt, char *file, off_t *pos, off_t min, off_t max, int direction)
 {
     struct tm ts;
@@ -75,11 +111,15 @@ int main(int argc, char *argv[])
     char *ts_format;
     time_t seconds;
     int fd;
+    int debug = 0;
     off_t filesize;
     time_t target_timestamp;
 
-    while((c = getopt(argc, argv, "n:t:")) != -1) {
+    while((c = getopt(argc, argv, "dn:t:")) != -1) {
         switch(c) {
+            case 'd':
+                debug = 1;
+                break;
             case 'n':
                 seconds = atol(optarg);
                 if (errno == EINVAL) {
@@ -88,11 +128,8 @@ int main(int argc, char *argv[])
                 }
                 break;
             case 't':
-                if (!strcmp(optarg, "java")) {
-                    ts_format = java_fmt;
-                } else if (!strcmp(optarg, "syslog")) {
-                    ts_format = syslog_fmt;
-                } else {
+                ts_format = get_ts_format(optarg);
+                if (ts_format == NULL) {
                     printf("Unknown timestamp format!\n");
                     exit(3);
                 }
@@ -132,8 +169,10 @@ int main(int argc, char *argv[])
     off_t prev_ts_pos;
     off_t next_ts_pos;
     target_timestamp = time(NULL) - seconds;
+    unsigned iterations = 0;
 
     for (;;) {
+        iterations++;
         pivot = (chunk_start + chunk_end)/2;
         prev_ts_pos = next_ts_pos = pivot;
         time_t next_ts = get_nearest_timestamp(ts_format, file, &next_ts_pos, chunk_start, chunk_end, 1);
@@ -156,6 +195,9 @@ int main(int argc, char *argv[])
         } else {
             chunk_end = pivot;
         }
+    }
+    if (debug) {
+        fprintf(stderr, " ====> done in %u iterations\n", iterations); 
     }
 
     munmap(file, 0);
