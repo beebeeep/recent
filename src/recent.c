@@ -13,6 +13,8 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _XOPEN_SOURCE 700
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -24,14 +26,24 @@
 #include <getopt.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <pcre.h>
 
-char *java_fmt = "%Y-%m-%d %H:%M:%S";
-char *syslog_fmt = "%b  %d %H:%M:%S";
+
+struct {
+    pcre *regex;
+    pcre_extra *re_extra;
+    char *format;
+} TS_FORMAT;
+
 
 off_t find_newline(char *file, off_t pos, off_t min, off_t max, int direction)
 {
     for(;;) {
         if (file[pos] == '\n') return pos;
+        if (direction < 0 && pos == min) {
+            printf("stuck\n");
+            return min;
+        }
         if (pos == min || pos == max) return -1;
         pos += (direction > 0?1:-1);
     }
@@ -43,7 +55,7 @@ void print_line(char *file, off_t pos)
     write(STDOUT_FILENO, &file[pos], end - pos);
 }
 
-char *get_ts_format(char *descr)
+void get_ts_format(char *descr)
 {
     FILE *f;
     f = fopen("timestamps.conf", "r");
@@ -72,20 +84,57 @@ char *get_ts_format(char *descr)
 
         fmt = strsep(&buf, "=");
         if (!strcmp(fmt, descr)) {
-            return buf;
+            char *re_ptr = strsep(&buf,"|");
+            printf("regex '%s', fmt '%s'\n", re_ptr, buf);
+            if (buf == NULL) {
+                printf("Error parsing timestamp format: '|' missing\n");
+                exit(3);
+            }
+            if (strlen(re_ptr) > 0) { 
+                const char *pcre_error;
+                int pcre_erroffset;
+                TS_FORMAT.regex = pcre_compile(re_ptr, PCRE_UTF8, &pcre_error, &pcre_erroffset, NULL);    
+                if (TS_FORMAT.regex == NULL) {
+                    printf("PCRE compilation failed at offset %d: %s\n", pcre_erroffset, pcre_error);
+                    exit(3);
+                }
+                TS_FORMAT.re_extra = pcre_study(TS_FORMAT.regex, 0, &pcre_error);
+                if (pcre_error != NULL) {
+                    printf("Errors studying pattern: %s\n", pcre_error);
+                    exit(3);
+                }
+            } else {
+                TS_FORMAT.regex = NULL;
+            }
+            TS_FORMAT.format = buf;
+            return;
         }
         buf = fmt;
     }
-    return NULL;
+    printf("Unknown timestamp format!\n");
+    exit(3);
 }
 
-time_t get_nearest_timestamp(char *fmt, char *file, off_t *pos, off_t min, off_t max, int direction)
+time_t get_nearest_timestamp(char *file, off_t *pos, off_t min, off_t max, int direction)
 {
     struct tm ts;
+    int rc;
+    int ovector[30];
     char *rest = NULL;
     memset(&ts, 0, sizeof(ts));
     for(;;) {
-        rest = strptime(&file[*pos], fmt, &ts);
+        if (TS_FORMAT.regex != NULL) {
+            rc = pcre_exec(TS_FORMAT.regex, TS_FORMAT.re_extra, &file[*pos], max - *pos, 0, 0, ovector, 30);
+            if (rc > 0) {
+                printf("match!\n");
+                rest = strptime(&file[*pos + ovector[2]], TS_FORMAT.format, &ts);
+            } else {
+                rest = NULL;
+            }
+        } else {
+            rest = strptime(&file[*pos], TS_FORMAT.format, &ts);
+        }
+
         if (rest == NULL) {
             *pos = find_newline(file, *pos, min, max, (direction > 0?1:-1)) + 1;
             if (*pos == 0) {
@@ -108,7 +157,6 @@ int main(int argc, char *argv[])
     int c;
     char *filename;
     char *file;
-    char *ts_format;
     time_t seconds;
     int fd;
     int debug = 0;
@@ -128,11 +176,7 @@ int main(int argc, char *argv[])
                 }
                 break;
             case 't':
-                ts_format = get_ts_format(optarg);
-                if (ts_format == NULL) {
-                    printf("Unknown timestamp format!\n");
-                    exit(3);
-                }
+                get_ts_format(optarg);
                 break;
         }
     }
@@ -175,9 +219,9 @@ int main(int argc, char *argv[])
         iterations++;
         pivot = (chunk_start + chunk_end)/2;
         prev_ts_pos = next_ts_pos = pivot;
-        time_t next_ts = get_nearest_timestamp(ts_format, file, &next_ts_pos, chunk_start, chunk_end, 1);
-        time_t prev_ts = get_nearest_timestamp(ts_format, file, &prev_ts_pos, chunk_start, chunk_end, -1);
-//        printf("next %sprev %s", ctime(&next_ts), ctime(&prev_ts));
+        time_t next_ts = get_nearest_timestamp(file, &next_ts_pos, chunk_start, chunk_end, 1);
+        time_t prev_ts = get_nearest_timestamp(file, &prev_ts_pos, chunk_start, chunk_end, -1);
+        printf("next %sprev %s\n", ctime(&next_ts), ctime(&prev_ts));
         if (next_ts == 0 && prev_ts < target_timestamp) {
             /* nothing found */
             break;
