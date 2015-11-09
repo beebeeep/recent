@@ -38,12 +38,9 @@ struct {
 
 off_t find_newline(char *file, off_t pos, off_t min, off_t max, int direction)
 {
+    fprintf(stderr, "find_newline, min %lu, max %lu, direction %i\n", min, max, direction);
     for(;;) {
         if (file[pos] == '\n') return pos;
-        if (direction < 0 && pos == min) {
-            printf("stuck\n");
-            return min;
-        }
         if (pos == min || pos == max) return -1;
         pos += (direction > 0?1:-1);
     }
@@ -51,8 +48,9 @@ off_t find_newline(char *file, off_t pos, off_t min, off_t max, int direction)
 
 void print_line(char *file, off_t pos)
 {
-    off_t end = find_newline(file, pos, 0, 1000, 1);
-    write(STDOUT_FILENO, &file[pos], end - pos);
+    // off_t end = find_newline(file, pos, 0, 1000, 1);
+    write(STDERR_FILENO, &file[pos], 80);
+    fprintf(stderr, "...\n");
 }
 
 void get_ts_format(char *descr)
@@ -85,7 +83,7 @@ void get_ts_format(char *descr)
         fmt = strsep(&buf, "=");
         if (!strcmp(fmt, descr)) {
             char *re_ptr = strsep(&buf,"|");
-            printf("regex '%s', fmt '%s'\n", re_ptr, buf);
+            fprintf(stderr, "regex '%s', fmt '%s'\n", re_ptr, buf);
             if (buf == NULL) {
                 printf("Error parsing timestamp format: '|' missing\n");
                 exit(3);
@@ -117,17 +115,24 @@ void get_ts_format(char *descr)
 
 time_t get_nearest_timestamp(char *file, off_t *pos, off_t min, off_t max, int direction)
 {
+    fprintf(stderr, "get_nearest_timestamp pos %lu, min %lu, max %lu, dir %i\n", *pos, min, max, direction);
     struct tm ts;
     int rc;
     int ovector[30];
+    char t[100];
     char *rest = NULL;
     memset(&ts, 0, sizeof(ts));
     for(;;) {
+        fprintf(stderr, "Searching nearest direction %i from >>>", direction);
+        print_line(file, *pos);
         if (TS_FORMAT.regex != NULL) {
             rc = pcre_exec(TS_FORMAT.regex, TS_FORMAT.re_extra, &file[*pos], max - *pos, 0, 0, ovector, 30);
             if (rc > 0) {
-                printf("match!\n");
+                pcre_copy_substring(&file[*pos], ovector, rc, 1, t, 100);
+                fprintf(stderr, "Matching against '%s'\n", t);
                 rest = strptime(&file[*pos + ovector[2]], TS_FORMAT.format, &ts);
+                strftime(t, 100, "%F %T %z", &ts);
+                fprintf(stderr, "match! ts: %s\n", t);
             } else {
                 rest = NULL;
             }
@@ -219,14 +224,30 @@ int main(int argc, char *argv[])
         iterations++;
         pivot = (chunk_start + chunk_end)/2;
         prev_ts_pos = next_ts_pos = pivot;
+        /*
         time_t next_ts = get_nearest_timestamp(file, &next_ts_pos, chunk_start, chunk_end, 1);
-        time_t prev_ts = get_nearest_timestamp(file, &prev_ts_pos, chunk_start, chunk_end, -1);
-        printf("next %sprev %s\n", ctime(&next_ts), ctime(&prev_ts));
+        time_t prev_ts = get_nearest_timestamp(file, &prev_ts_pos, chunk_start, chunk_end, -1); 
+        */
+
+        char n[100], p[100], t[100];
+        time_t next_ts = get_nearest_timestamp(file, &next_ts_pos, chunk_start, st.st_size, 1);
+        time_t prev_ts = get_nearest_timestamp(file, &prev_ts_pos, 0, chunk_end, -1);
+
+        ctime_r(&next_ts, n); 
+        ctime_r(&prev_ts, p);
+        ctime_r(&target_timestamp, t);
+        fprintf(stderr, "next %sprev %starget %s\n", n, p, t);
+
         if (next_ts == 0 && prev_ts < target_timestamp) {
             /* nothing found */
+            fprintf(stderr, "Nothing found\n");
             break;
         }
-//        if (prev_ts == 0 && next_ts )
+        if (prev_ts == 0 && next_ts >= target_timestamp ) {
+            /* whole file is matching target ts */
+            write(STDOUT_FILENO, &file[prev_ts_pos], filesize);
+            break;
+        }
         if (target_timestamp == prev_ts) {
             write(STDOUT_FILENO, &file[prev_ts_pos], filesize - prev_ts_pos);
             break;
