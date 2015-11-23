@@ -2,7 +2,7 @@ TARGET=recent
 LIBS=-lpcre
 
 CC ?= gcc
-CFLAGS += -std=gnu99 -Wall -pedantic -g
+CFLAGS += -std=gnu99 -Wall -pedantic -g -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700
 INSTALL ?= install
 
 OBJECTS = $(patsubst %.c, %.o, $(wildcard src/*.c))

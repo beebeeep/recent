@@ -13,8 +13,6 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _XOPEN_SOURCE 700
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -39,7 +37,7 @@ struct {
     pcre_extra *re_extra;
     char *format;
     int has_tz;
-} TS_FORMAT;
+} TS_FORMAT = { .format = NULL, .regex = NULL, .re_extra = NULL, .has_tz = 0 };
 
 static long int local_gmtoff;
 
@@ -53,12 +51,14 @@ off_t find_newline(char *file, off_t pos, off_t min, off_t max, int direction)
     }
 }
 
+#ifdef DEBUG
 void print_line(char *file, off_t pos)
 {
     // off_t end = find_newline(file, pos, 0, 1000, 1);
     write(STDERR_FILENO, &file[pos], 80);
     printd("...\n");
 }
+#endif
 
 void get_ts_format(char *descr)
 {
@@ -147,8 +147,8 @@ time_t get_nearest_timestamp(char *file, off_t *pos, off_t min, off_t max, int d
                 if (TS_FORMAT.has_tz) {
                     // if timestamp format contains timezone, convert ts to local time as far as mktime expects local time
                     // otherwise, do nothing, i.e. treat all timestamps in file given in local time
-                    ts.tm_sec = ts.tm_sec - ts.__tm_gmtoff + local_gmtoff;
-                    ts.__tm_gmtoff = local_gmtoff;
+                    ts.tm_sec = ts.tm_sec - ts.tm_gmtoff + local_gmtoff;
+                    ts.tm_gmtoff = local_gmtoff;
                 }
                 strftime(t, 100, "%F %T %z", &ts);
                 printd("match! ts: %s\n", t);
@@ -181,25 +181,39 @@ int main(int argc, char *argv[])
     int c;
     char *filename;
     char *file;
-    time_t seconds;
+    time_t seconds = 0;
     int fd;
     off_t filesize;
     time_t target_timestamp;
 
-    while((c = getopt(argc, argv, "n:t:")) != -1) {
+    while((c = getopt(argc, argv, "hn:t:")) != -1) {
         switch(c) {
             case 'n':
                 seconds = atol(optarg);
-                if (errno == EINVAL) {
-                    printf("Specify integer value for '-n'\n");
+                if (errno == EINVAL || seconds <= 0) {
+                    printf("Specify positive integer value for '-n'\n");
                     exit(-1);
                 }
                 break;
             case 't':
                 get_ts_format(optarg);
                 break;
+            case 'h':
+                printf("USAGE:\t%s [-n SECONDS] [-t FORMAT] FILE\n", argv[0]);
+                exit(0);
+                break;
         }
     }
+
+    if (seconds == 0) {
+        printf("Specify positive integer value for '-n'\n");
+        exit(-1);
+    }
+    if (TS_FORMAT.format == NULL) {
+        printf("Specify timestamp format with '-t'\n");
+        exit(-1);
+    }
+
 
     if (optind  > argc - 1) {
         printf("Specify file to process!\n");
@@ -234,7 +248,7 @@ int main(int argc, char *argv[])
     off_t next_ts_pos;
     time_t now = time(NULL);
     struct tm *tm_now = localtime(&now);
-    local_gmtoff = tm_now->__tm_gmtoff;
+    local_gmtoff = tm_now->tm_gmtoff;
     target_timestamp = now - seconds;
     unsigned iterations = 0;
 
@@ -285,5 +299,5 @@ int main(int argc, char *argv[])
 
     munmap(file, 0);
     close(fd);
-    return 0;
+    exit(0);
 }
