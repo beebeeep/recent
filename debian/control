@@ -1,0 +1,18 @@
+Source: recent
+Section: misc
+Priority: extra
+Maintainer:  Danila Migalin <me@miga.me.uk>
+Build-Depends: debhelper (>= 9), libpcre3-dev
+Standards-Version: 3.9.1
+Vcs-Svn: https://github.com/beebeeep/recent
+
+Package: recent
+Architecture: any
+Depends:  ${shlibs:Depends}, ${misc:Depends}
+Description: Tail logs by timestamp
+    recent is a simple tool that works just as standard 'tail' utility but
+    instead of printing last X lines, it prints the recent ones - lines that was
+    added X seconds ago.  Of course, it assumes that all lines in file (well,
+    actually, at least some of them) contains a timestamp, so recent is
+    extremely handy for processing log files for various needs - monitoring,
+    debugging, quick analysis and so on.

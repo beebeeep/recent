@@ -24,7 +24,7 @@ $(TARGET): $(OBJECTS)
 
 install: $(TARGET)
 	$(INSTALL) -D -m 755 $(TARGET) $(DESTDIR)/usr/bin/$(TARGET)
-	$(INSTALL) -D -m 644 contrib/timestamps.conf /etc/$(TARGET)/timestamps.conf
+	$(INSTALL) -D -m 644 contrib/timestamps.conf $(DESTDIR)/etc/$(TARGET)/timestamps.conf
 
 clean:
 	rm -f src/*.o

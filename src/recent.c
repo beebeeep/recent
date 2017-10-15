@@ -29,7 +29,7 @@
 #ifdef DEBUG
 #define printd(...) fprintf(stderr, __VA_ARGS__)
 #else
-#define printd(...) asm("nop")
+#define printd(...) //
 #endif
 
 struct {
